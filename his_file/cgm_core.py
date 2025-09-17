@@ -73,12 +73,12 @@ class CreditGradeModel:
     - 资产波动率隐含计算
     """
     
-    def __init__(self, V0 , D, t, r, R, market_cds_spread ,L = 0.5, lamb = 0.3):
+    def __init__(self, S , D, t, r, R, market_cds_spread ,L = 0.5, lamb = 0.3):
         """Initialize the Credit Grade Model
         
         Parameters:
         -----------
-        V0 : float
+        S : float
             current asset value (Stock Price proxy)
         sigma : float  
             asset volatility sigma(to be implied from CDS price) from implied_vol_cds.py
@@ -101,10 +101,10 @@ class CreditGradeModel:
         
         """
 
-        self.V0 = V0
+        self.S = S
 
         # 此处的sigma从cds price imply 过来
-        L2 = calculate_leverage_ratio(V0, D, r, t)
+        L2 = calculate_leverage_ratio(S, D, r, t)
 
         # target implied 
         self.sigma = implied_volatility_from_cds_spread(
@@ -121,13 +121,13 @@ class CreditGradeModel:
         self.lamb = lamb
     
 
-    def calculate_survival_probability(self,V0, t ,sigma):
+    def calculate_survival_probability(self,S, t ,sigma):
         """
         计算生存概率 P(t) - 基于公式 2.11
         
         Parameters:
         -----------
-        V0 : float
+        S : float
             当前资产价值(Stock Price)
 
         sigma : float  
@@ -148,11 +148,11 @@ class CreditGradeModel:
         
         公式说明:
         P(t) = Φ(-At/2 + log(d)/√At) - d * Φ(-At/2 - log(d)/√At)
-        其中: d = V0*e^(λ²)/LD, At = σ²*t + λ²
+        其中: d = S*e^(λ²)/LD, At = σ²*t + λ²
         """
         
         # 计算 d 参数 (公式 2.12)
-        d = (V0 + self.L* self.D) * np.exp(self.lamb**2) / (self.L*self.D)
+        d = (S + self.L* self.D) * np.exp(self.lamb**2) / (self.L*self.D)
         # 计算 At 参数 (公式 2.13) 
         At_square = sigma**2 * t + self.lamb**2
         At = np.sqrt(At_square)
@@ -174,12 +174,12 @@ class CreditGradeModel:
         survival_prob = max(0.0, min(1.0, survival_prob))
         
         # logger.info(f"生存概率计算: P({t}) = {survival_prob:.6f}")
-        # logger.info(f"参数: V0={self.V0}, asset volatility={sigma}, L={self.L}, D={self.D}, λ={self.lamb}")
+        # logger.info(f"参数: S={self.S}, asset volatility={sigma}, L={self.L}, D={self.D}, λ={self.lamb}")
         # logger.info(f"中间值: d={d:.6f}, At={At:.6f}")
         
         return survival_prob
     
-    def calculate_default_probability(self, V0, sigma):
+    def calculate_default_probability(self, S, sigma):
         """
         计算违约概率
         
@@ -187,18 +187,18 @@ class CreditGradeModel:
         --------
         float : 违约概率 = 1 - 生存概率
         """
-        survival_prob = self.calculate_survival_probability(V0, self.t,sigma)
+        survival_prob = self.calculate_survival_probability(S, self.t,sigma)
         return 1.0 - survival_prob
     
 
-    def calculate_cds_spread_continuous(self, V0, sigma , R=0.4):
+    def calculate_cds_spread_continuous(self, S, sigma , R=0.4):
         """
         计算CDS连续支付价差 - 基于公式 2.15
         此处为CDS定价公式
         
         Parameters:
         -----------
-        V0 : float
+        S : float
             当前资产价值
         sigma : float
             资产波动率 sigma  
@@ -227,11 +227,11 @@ class CreditGradeModel:
         xi = (self.lamb**2) / (sigma**2)
         
         # 计算 P(0) 和 P(t)
-        P_0 = self.calculate_survival_probability(V0=V0,t=0.001,sigma=sigma)  # t=0的近似值
-        P_t = self.calculate_survival_probability(V0=V0,t=self.t,sigma=sigma)
+        P_0 = self.calculate_survival_probability(S=S,t=0.001,sigma=sigma)  # t=0的近似值
+        P_t = self.calculate_survival_probability(S=S,t=self.t,sigma=sigma)
         
         # 计算G函数相关项 (简化版本，完整实现需要公式2.16)
-        G_term = self._calculate_G_function_approximate(V0=V0, u=self.t + xi, sigma=sigma) - self._calculate_G_function_approximate(V0=V0,u=xi, sigma=sigma)
+        G_term = self._calculate_G_function_approximate(S=S, u=self.t + xi, sigma=sigma) - self._calculate_G_function_approximate(S=S,u=xi, sigma=sigma)
         # G_term_denominator = self._calculate_G_function_approximate(xi)
         
         # 计算分子
@@ -258,7 +258,7 @@ class CreditGradeModel:
         
         return cds_spread
     
-    def _calculate_G_function_approximate(self, V0, u, sigma):
+    def _calculate_G_function_approximate(self, S, u, sigma):
         """
         xi: 传入的自变量
         G函数的近似计算 (公式2.16的简化版本)
@@ -268,7 +268,7 @@ class CreditGradeModel:
         """
         
         # 使用简化的近似公式
-        d = (V0 + self.L*self.D) * np.exp(self.lamb**2) / (self.L*self.D)
+        d = (S + self.L*self.D) * np.exp(self.lamb**2) / (self.L*self.D)
         
         # 简化的G函数近似
         z = np.sqrt(0.25 + 2 * self.r / (sigma**2))
@@ -285,7 +285,7 @@ class CreditGradeModel:
         
         Parameters:
         -----------
-        V0 : float
+        S : float
             当前资产价值
         LD : float  
             债务面值
@@ -320,17 +320,17 @@ class CreditGradeModel:
         """
         
         # 基准计算
-        base_spread = self.calculate_cds_spread_continuous(self.V0, R, sigma_matching)
-        base_default_prob = self.calculate_default_probability(self.V0, sigma_matching)
+        base_spread = self.calculate_cds_spread_continuous(self.S, R, sigma_matching)
+        base_default_prob = self.calculate_default_probability(self.S, sigma_matching)
         
         # Delta: 资产价值敏感性
-        dV = self.V0 * 0.01  # 1% 冲击
-        spread_up = self.calculate_cds_spread_continuous(self.V0 + dV, R, sigma_matching)
+        dV = self.S * 0.01  # 1% 冲击
+        spread_up = self.calculate_cds_spread_continuous(self.S + dV, R, sigma_matching)
         delta = (spread_up - base_spread) / dV
 
 
         # Gamma: 资产价值二阶敏感性 (凸性)
-        spread_down = self.calculate_cds_spread_continuous(self.V0 - dV, R, sigma_matching)
+        spread_down = self.calculate_cds_spread_continuous(self.S - dV, R, sigma_matching)
         gamma = (spread_up - 2*base_spread + spread_down) / (dV**2)
         # Vega: 波动率敏感性
         # 此处vega尚未实现 后续接口等待接入
@@ -343,7 +343,7 @@ class CreditGradeModel:
         dsigma = 0.01  # 1% 波动率冲击
         # 创建新的模型实例用于计算波动率敏感性
         # temp_model_up = CreditGradeModel(
-        #     V0=self.V0, 
+        #     S=self.S, 
         #     D=self.D, 
         #     t=self.t, 
         #     r=self.r, 
@@ -377,7 +377,7 @@ def demo_calculation():
     """演示计算功能"""
     
     logger.info("=== Credit Grade Model===")
-    V0 = 100.0        # 资产价值 (股价)
+    S = 100.0        # 资产价值 (股价)
     L = 0.5         # 债务面值
     D = 150         # 债务面值
     t = 5           # 5年期
@@ -386,10 +386,10 @@ def demo_calculation():
     lamb = 0.3        # 违约壁垒参数
     market_cds_spread = 250  # 市场CDS价差
     # 创建模型实例
-    cgm = CreditGradeModel(V0 = V0, L = L, D = D, t = t, r = r, R = R, lamb = lamb, market_cds_spread = market_cds_spread)
+    cgm = CreditGradeModel(S = S, L = L, D = D, t = t, r = r, R = R, lamb = lamb, market_cds_spread = market_cds_spread)
 
     logger.info("Parameters:")
-    logger.info(f"Asset Value V0: {V0}")
+    logger.info(f"Asset Value S: {S}")
     logger.info(f"Market CDS Spread: {market_cds_spread}bp")
     logger.info(f"Debt Value L: {L}")
     logger.info(f"Debt Value D: {D}")
@@ -400,7 +400,7 @@ def demo_calculation():
     logger.info(f"Implied Asset Volatility: {cgm.sigma:.4f}")
     
     # 1. 计算生存概率
-    survival_prob = cgm.calculate_survival_probability(V0,t, cgm.sigma)
+    survival_prob = cgm.calculate_survival_probability(S,t, cgm.sigma)
     default_prob = 1 - survival_prob
     
     logger.info("=== Survival Probability Calculation (Formula 2.11) ===")
@@ -408,7 +408,7 @@ def demo_calculation():
     logger.info(f"Default Probability: {default_prob:.4f}")
     
     # 2. 计算CDS价差
-    cds_spread = cgm.calculate_cds_spread_continuous(V0, R, cgm.sigma)
+    cds_spread = cgm.calculate_cds_spread_continuous(S, R, cgm.sigma)
     
     logger.info("=== CDS Spread Calculation (Formula 2.15) ===")
     logger.info(f"CDS Spread: {cds_spread:.4f} ({cds_spread*10000:.1f} bps)")

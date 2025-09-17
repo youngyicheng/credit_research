@@ -1,24 +1,24 @@
-2025-09-16 09:53:03 - __main__ - INFO - ============================================================
-2025-09-16 09:53:03 - __main__ - INFO - CGM Core Module Started
-2025-09-16 09:53:03 - __main__ - INFO - Log File: /home/yicheng/credit/logs/cgm_core.log
-2025-09-16 09:53:03 - __main__ - INFO - Start Time: 2025-09-16 09:53:03
-2025-09-16 09:53:03 - __main__ - INFO - ============================================================
-2025-09-16 09:53:03 - __main__ - INFO - === Credit Grade Model===
-2025-09-16 09:53:03 - __main__ - INFO - Parameters:
-2025-09-16 09:53:03 - __main__ - INFO - Asset Value V0: 100.0
-2025-09-16 09:53:03 - __main__ - INFO - Market CDS Spread: 250bp
-2025-09-16 09:53:03 - __main__ - INFO - Debt Value L: 0.5
-2025-09-16 09:53:03 - __main__ - INFO - Debt Value D: 150
-2025-09-16 09:53:03 - __main__ - INFO - Maturity t: 5 years
-2025-09-16 09:53:03 - __main__ - INFO - Risk Free Rate r: 5.0%
-2025-09-16 09:53:03 - __main__ - INFO - Recovery Rate R: 50.0%
-2025-09-16 09:53:03 - __main__ - INFO - Default Barrier Parameter λ: 0.3
-2025-09-16 09:53:03 - __main__ - INFO - Implied Asset Volatility: 0.1983
-2025-09-16 09:53:03 - __main__ - INFO - === Survival Probability Calculation (Formula 2.11) ===
-2025-09-16 09:53:03 - __main__ - INFO - Survival Probability P(5): 0.8753
-2025-09-16 09:53:03 - __main__ - INFO - Default Probability: 0.1247
-2025-09-16 09:53:03 - __main__ - INFO - === CDS Spread Calculation (Formula 2.15) ===
-2025-09-16 09:53:03 - __main__ - INFO - CDS Spread: 0.1571 (1571.4 bps)
-2025-09-16 09:53:03 - __main__ - INFO - === Risk Metrics ===
-2025-09-16 09:53:03 - __main__ - INFO - Delta (Asset Value Sensitivity): -0.001419
-2025-09-16 09:53:03 - __main__ - INFO - Gamma (Asset Value Second Order Sensitivity): 0.000026
+2025-09-16 21:05:37 - __main__ - INFO - ============================================================
+2025-09-16 21:05:37 - __main__ - INFO - CGM Core Module Started
+2025-09-16 21:05:37 - __main__ - INFO - Log File: /home/yicheng/credit/logs/cgm_core.log
+2025-09-16 21:05:37 - __main__ - INFO - Start Time: 2025-09-16 21:05:37
+2025-09-16 21:05:37 - __main__ - INFO - ============================================================
+2025-09-16 21:05:37 - __main__ - INFO - === Credit Grade Model===
+2025-09-16 21:05:37 - __main__ - INFO - Parameters:
+2025-09-16 21:05:37 - __main__ - INFO - Asset Value S: 100.0
+2025-09-16 21:05:37 - __main__ - INFO - Market CDS Spread: 250bp
+2025-09-16 21:05:37 - __main__ - INFO - Debt Value L: 0.5
+2025-09-16 21:05:37 - __main__ - INFO - Debt Value D: 150
+2025-09-16 21:05:37 - __main__ - INFO - Maturity t: 5 years
+2025-09-16 21:05:37 - __main__ - INFO - Risk Free Rate r: 5.0%
+2025-09-16 21:05:37 - __main__ - INFO - Recovery Rate R: 50.0%
+2025-09-16 21:05:37 - __main__ - INFO - Default Barrier Parameter λ: 0.3
+2025-09-16 21:05:37 - __main__ - INFO - Implied Asset Volatility: 0.1983
+2025-09-16 21:05:37 - __main__ - INFO - === Survival Probability Calculation (Formula 2.11) ===
+2025-09-16 21:05:37 - __main__ - INFO - Survival Probability P(5): 0.8753
+2025-09-16 21:05:37 - __main__ - INFO - Default Probability: 0.1247
+2025-09-16 21:05:37 - __main__ - INFO - === CDS Spread Calculation (Formula 2.15) ===
+2025-09-16 21:05:37 - __main__ - INFO - CDS Spread: 0.1571 (1571.4 bps)
+2025-09-16 21:05:37 - __main__ - INFO - === Risk Metrics ===
+2025-09-16 21:05:37 - __main__ - INFO - Delta (Asset Value Sensitivity): -0.001419
+2025-09-16 21:05:37 - __main__ - INFO - Gamma (Asset Value Second Order Sensitivity): 0.000026

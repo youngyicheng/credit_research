@@ -7,8 +7,9 @@
 ## 文件结构
 
 - `implied_vol_solver.py` - 主要的求解器类
-- `example_usage.py` - 使用示例
-- `README_implied_vol_solver.md` - 本说明文档
+- `cds2vol.py` - 后续大规模接入数据接口的py（尚未实现）
+- `demo.ipynb ` - 流程参考notebook
+- `README.md` - 本说明文档
 
 ## 主要功能
 
@@ -21,12 +22,10 @@
 1. **calculate_survival_probability(S, t, sigma)**
    - 计算生存概率 P(t)
    - 基于公式 2.11
-   - 与cgm_core.py完全一致
 
 2. **calculate_cds_spread_continuous(S, sigma, R)**
    - 计算CDS连续支付价差
    - 基于公式 2.15
-   - 与cgm_core.py完全一致
 
 3. **solve_implied_volatility(target_cds_spread, R, method)**
    - 主要求解接口
@@ -113,37 +112,3 @@ cd /home/yicheng/credit
 python implied_vol_solver.py      # 运行完整测试
 python example_usage.py           # 运行使用示例
 ```
-
-## 技术特点
-
-### 数值稳定性
-
-1. **边界检查**: 自动检测搜索区间的有效性
-2. **容错处理**: 处理计算异常和边界情况
-3. **结果验证**: 自动验证求解结果的准确性
-
-### 性能优化
-
-1. **函数复用**: 直接使用cgm_core.py的计算函数
-2. **算法选择**: 提供多种求解方法
-3. **参数调优**: 可调节收敛容差和搜索范围
-
-## 应用场景
-
-1. **市场风险管理**: 从市场CDS价格推断隐含资产波动率
-2. **模型校准**: 校准信用风险模型参数
-3. **套利交易**: 识别CDS市场的定价偏差
-4. **压力测试**: 评估不同波动率情景下的信用风险
-
-## 注意事项
-
-1. **参数敏感性**: 求解结果对初始参数较为敏感
-2. **收敛性**: 某些极端情况下可能无法收敛
-3. **模型局限**: 基于简化的G函数近似公式
-
-## 扩展建议
-
-1. 实现完整的G函数计算 (公式2.16)
-2. 添加Newton-Raphson方法
-3. 支持批量处理多个CDS合约
-4. 添加敏感性分析功能

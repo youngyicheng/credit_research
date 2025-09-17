@@ -110,5 +110,4 @@ test_consistency_with_cgm_core()
 ```bash
 cd /home/yicheng/credit
 python implied_vol_solver.py      # 运行完整测试
-python example_usage.py           # 运行使用示例
 ```

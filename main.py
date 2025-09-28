@@ -49,7 +49,7 @@ def load_cds_data(path):
     df_all = pd.DataFrame()
     for path  in tqdm(path_lst):
         a = pd.read_parquet(f'/home/yicheng/credit/data/{path}')
-        use_lst = ['ticker','date','tenor','parspread','convspreard','upfront', 'runningcoupon','primarycoupon',]
+        use_lst = ['ticker','date','tenor','parspread','convspreard','upfront', 'runningcoupon','primarycoupon', 'cdsrealrecovery','cdsassumedrecovery','carriedforward', 'compositedepth5y',]
         b = a.loc[a['tenor']=='5Y']
         temp = b[use_lst]
         # temp['path'] = path
@@ -101,7 +101,7 @@ def load_financial_data(df_use,start_date, end_date):
     # 使用reindex替代loc，自动处理缺失索引
     close_ticker_aligned = close_ticker.reindex(df_use.index)
     financial_debt_aligned = financial_debt_ratio.reindex(df_use.index)
-    close_ticker_aligned['XRX'].name = 'close_price'
+    close_ticker_aligned['XRX'].name = 'stock_price'
     financial_debt_aligned['XRX'].name = 'financial_debt_ratio'
 
     return close_ticker_aligned['XRX'] , financial_debt_aligned['XRX']
@@ -134,6 +134,7 @@ def MultiDay_CDSImpliedVolatilitySolver(df):
     """
 
     # D = 150.0        # debt per share
+    D = 150.0        # debt per share
     t = 5.0          # CDS tenor
     r = 0.05         # risk free rate
     R = 0.4          # recovery rate
@@ -156,6 +157,7 @@ def MultiDay_CDSImpliedVolatilitySolver(df):
             df.at[i, 'implied_vol'] = implied_vol
             df.at[i, 'par_spread_error'] = error
 
+
     return df
             # break
 
@@ -176,26 +178,27 @@ def greek_calc(df):
     R = 0.4          # 回收率
     L = 0.5          # 债务回收率
     lamb = 0.3       # 违约壁垒参数
-    from tqdm import tqdm
+    notional = 100000000        
+    cds_coupon = 0.01
+
+
+    solver = CDSImpliedVolatilitySolver(t, r, L, lamb, notional, cds_coupon)
     df['delta'] = np.nan
     df['gamma'] = np.nan
-    
+
     with redirect_stdout(StringIO()):
         for i, row in tqdm(df.iterrows()):
-            # 参数设置
-            S = row['close_price']
+            # param setting
+            S = row['stock_price']
             h = max(1e-4 * S, 1.0)   # 例如：价格的万分之一与 1 取大者
 
-
-            solver_up = CDSImpliedVolatilitySolver(S + h, row['financial_debt_ratio'], t, r, L, lamb)
-            f_up = solver_up.calculate_cds_spread_continuous(S + h, row['implied_vol'], R)
+            f_up = solver.calculate_cds_spread_continuous(S + h, row['financial_debt_ratio'],row['implied_vol'], row['cdsassumedrecovery'])
 
             # f(S) —— 你已有的市场或基准值
-            f_mid = row['parspread']
+            f_mid = row['upfront']
 
             # f(S-h)
-            solver_dn = CDSImpliedVolatilitySolver(S - h, row['financial_debt_ratio'], t, r, L, lamb)
-            f_dn = solver_dn.calculate_cds_spread_continuous(S - h, row['implied_vol'], R)
+            f_dn = solver.calculate_cds_spread_continuous(S - h, row['financial_debt_ratio'],row['implied_vol'], row['cdsassumedrecovery'])
 
             # 中心差分 Delta / Gamma
             delta = (f_up - f_dn) / (2.0 * h)

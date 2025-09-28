@@ -31,42 +31,48 @@ logger = logging.getLogger(__name__)
 
 class CDSImpliedVolatilitySolver:
     """
-    CDS隐含波动率求解器
+    CDS implied volatility solver
     
-    从市场观察到的CDS价差反解出隐含的资产波动率
+    from market observed CDS upfront to solve the implied asset volatility
     """
     
-    def __init__(self, S: float, D: float, t: float, r: float, 
-                 L: float = 0.5, lamb: float = 0.3):
+    def __init__(self, t: float, r: float, 
+                 L: float = 0.5, lamb: float = 0.3, notional: float = 100000000, cds_coupon: float = 0.0):
         """
-        初始化CDS隐含波动率求解器
+        initialize CDS implied volatility solver
         
         Parameters:
         -----------
         S : float
-            当前资产价值 (股价代理)
+            stock price
         D : float  
-            债务面值
+            debt per share
         t : float
-            CDS期限 (年)
+            CDS tenor (year)
         r : float
-            无风险利率
+            risk free rate
         L : float
-            全球债务回收率 (默认0.5)
+            global debt recovery rate (default 0.5)
         lamb : float
-            违约壁垒标准差参数 (默认0.3)
+            default 0.3 (default barrier standard deviation)
+        notional : float
+            notional of CDS
+        cds_coupon : float
+            coupon of CDS
         """
-        self.S = S
-        self.D = D
+        # self.S = S
+        # self.D = D
         self.t = t
         self.r = r
         self.L = L
         self.lamb = lamb
+        self.notional = notional
+        self.cds_coupon = cds_coupon
         
-        logger.info(f"CDS隐含波动率求解器初始化完成")
-        logger.info(f"参数: S={S}, D={D}, t={t}, r={r}, L={L}, lamb={lamb}")
+        logger.info(f"CDS implied volatility solver initialized")
+        logger.info(f"parameters: t={t}, r={r}, L={L}, lamb={lamb}")
     
-    def calculate_survival_probability(self, S: float, t: float, sigma: float) -> float:
+    def calculate_survival_probability(self, S: float, D: float, t: float, sigma: float) -> float:
         """
         计算生存概率 P(t) - 基于公式 2.11
         完全基于cgm_core.py中的实现
@@ -74,9 +80,11 @@ class CDSImpliedVolatilitySolver:
         Parameters:
         -----------
         S : float
-            当前资产价值(Stock Price)
+            stock price
+        D : float
+            debt per share
         t : float
-            时间期限 (年)
+            time to maturity (year)
         sigma : float  
             资产波动率 sigma
             
@@ -85,7 +93,7 @@ class CDSImpliedVolatilitySolver:
         float : 生存概率 P(t)
         """
         # 计算 d 参数 (公式 2.12) - 与cgm_core.py完全一致
-        d = (S + self.L * self.D) * np.exp(self.lamb**2) / (self.L * self.D)
+        d = (S + self.L * D) * np.exp(self.lamb**2) / (self.L * D)
         
         # 计算 At 参数 (公式 2.13) - 与cgm_core.py完全一致
         At_square = sigma**2 * t + self.lamb**2
@@ -109,7 +117,7 @@ class CDSImpliedVolatilitySolver:
         
         return survival_prob
     
-    def _calculate_G_function_approximate(self, S: float, u: float, sigma: float) -> float:
+    def _calculate_G_function_approximate(self, S: float, D: float, u: float, sigma: float) -> float:
         """
         G函数的近似计算 (公式2.16的简化版本)
         完全基于cgm_core.py中的实现
@@ -117,7 +125,9 @@ class CDSImpliedVolatilitySolver:
         Parameters:
         -----------
         S : float
-            当前资产价值
+            stock price
+        D : float
+            debt per share
         u : float
             自变量
         sigma : float
@@ -128,7 +138,7 @@ class CDSImpliedVolatilitySolver:
         float : G函数近似值
         """
         # 使用简化的近似公式 - 与cgm_core.py完全一致
-        d = (S + self.L*self.D) * np.exp(self.lamb**2) / (self.L*self.D)
+        d = (S + self.L*D) * np.exp(self.lamb**2) / (self.L*D)
         
         # 简化的G函数近似 - 与cgm_core.py完全一致
         z = np.sqrt(0.25 + 2 * self.r / (sigma**2))
@@ -138,7 +148,7 @@ class CDSImpliedVolatilitySolver:
         
         return G_approx
     
-    def calculate_cds_spread_continuous(self, S: float, sigma: float, R: float = 0.4) -> float:
+    def calculate_cds_spread_continuous(self, S: float, D: float, sigma: float, R: float = 0.4) -> float:
         """
         计算CDS连续支付价差 - 基于公式 2.15
         完全基于cgm_core.py中的实现
@@ -146,7 +156,9 @@ class CDSImpliedVolatilitySolver:
         Parameters:
         -----------
         S : float
-            当前资产价值
+            stock price
+        D : float
+            debt per share
         sigma : float
             资产波动率 sigma
         R : float
@@ -160,39 +172,44 @@ class CDSImpliedVolatilitySolver:
         xi = (self.lamb**2) / (sigma**2)
         
         # 计算 P(0) 和 P(t) - 与cgm_core.py完全一致
-        P_0 = self.calculate_survival_probability(S=S, t=0.001, sigma=sigma)  # t=0的近似值
-        P_t = self.calculate_survival_probability(S=S, t=self.t, sigma=sigma)
+        P_0 = self.calculate_survival_probability(S=S, D=D, t=0.001, sigma=sigma)  # t=0的近似值
+        P_t = self.calculate_survival_probability(S=S, D=D, t=self.t, sigma=sigma)
         
         # 计算G函数相关项 (简化版本，完整实现需要公式2.16) - 与cgm_core.py完全一致
-        G_term = self._calculate_G_function_approximate(S=S, u=self.t + xi, sigma=sigma) - self._calculate_G_function_approximate(S=S, u=xi, sigma=sigma)
+        G_term = self._calculate_G_function_approximate(S=S, D=D, u=self.t + xi, sigma=sigma) - self._calculate_G_function_approximate(S=S, D=D, u=xi, sigma=sigma)
+
+
+        # # 计算分子 - 与cgm_core.py完全一致
+        # numerator = self.r * (1 - R) * (1 - P_0 + np.exp(self.r * xi) * G_term)
         
-        # 计算分子 - 与cgm_core.py完全一致
-        numerator = self.r * (1 - R) * (1 - P_0 + np.exp(self.r * xi) * G_term)
+        # # 计算分母 - 与cgm_core.py完全一致
+        # denominator = P_0 - P_t * np.exp(-self.r * self.t) - np.exp(self.r * xi) * G_term
         
-        # 计算分母 - 与cgm_core.py完全一致
-        denominator = P_0 - P_t * np.exp(-self.r * self.t) - np.exp(self.r * xi) * G_term
-        
-        # 避免除零 - 与cgm_core.py完全一致
-        if abs(denominator) < 1e-10:
-            logger.warning("分母接近零，使用替代计算方法")
-            # 使用简化公式
-            default_prob = 1 - P_t
-            spread = (default_prob * (1 - R)) / self.t
-            return spread
-        
-        cds_spread = numerator / denominator
+        # cds_spread = numerator / denominator
+
+        # choose A12 method to solve this equation
+        first_term = (1-R) *(1-P_0)
+        second_term = -1* self.cds_coupon /self.r * (P_0 - P_t* np.exp(-1*self.r*self.t)) 
+        third_term = (1 - R +self.cds_coupon/self.r) * G_term * np.exp(self.r * xi)
+
+        cds_spread = first_term + second_term + third_term
+
         
         # 确保价差为正 - 与cgm_core.py完全一致
         cds_spread = max(0.0, cds_spread)
         
         return cds_spread
     
-    def objective_function(self, sigma: float, target_cds_spread: float, R: float) -> float:
+    def objective_function(self, S: float, D: float, sigma: float, target_cds_spread: float, R: float) -> float:
         """
         目标函数: 模型CDS价差 - 市场CDS价差
         
         Parameters:
         -----------
+        S : float
+            stock price
+        D : float
+            debt per share
         sigma : float
             资产波动率 (待求解)
         target_cds_spread : float
@@ -205,13 +222,13 @@ class CDSImpliedVolatilitySolver:
         float : 目标函数值
         """
         try:
-            model_spread = self.calculate_cds_spread_continuous(self.S, sigma, R)
+            model_spread = self.calculate_cds_spread_continuous(S, D, sigma, R)
             return model_spread - target_cds_spread
         except Exception as e:
             logger.warning(f"计算CDS价差时出错 (sigma={sigma}): {e}")
             return np.inf
     
-    def solve_implied_volatility_brent(self, target_cds_spread: float, R: float = 0.4,
+    def solve_implied_volatility_brent(self, S: float, D: float, target_cds_spread: float, R: float = 0.4,
                                      vol_min: float = 0.01, vol_max: float = 2.0,
                                      tolerance: float = 1e-6) -> Optional[float]:
         """
@@ -219,6 +236,10 @@ class CDSImpliedVolatilitySolver:
         
         Parameters:
         -----------
+        S : float
+            stock price
+        D : float
+            debt per share
         target_cds_spread : float
             目标CDS价差 (市场观察值)
         R : float
@@ -236,7 +257,7 @@ class CDSImpliedVolatilitySolver:
         """
         
         def obj_func(sigma):
-            return self.objective_function(sigma, target_cds_spread, R)
+            return self.objective_function(S, D, sigma, target_cds_spread, R)
         
         try:
             # 检查边界条件
@@ -266,7 +287,7 @@ class CDSImpliedVolatilitySolver:
             implied_vol = brentq(obj_func, vol_min, vol_max, xtol=tolerance)
             
             # 验证结果
-            verification_spread = self.calculate_cds_spread_continuous(self.S, implied_vol, R)
+            verification_spread = self.calculate_cds_spread_continuous(S, D, implied_vol, R)
             error = abs(verification_spread - target_cds_spread)
             
             logger.info(f"Brent方法求解成功:")
@@ -281,29 +302,33 @@ class CDSImpliedVolatilitySolver:
             logger.error(f"Brent方法求解失败: {e}")
             return None
     
-    def solve_implied_volatility_minimize(self, target_cds_spread: float, R: float = 0.4,
+    def solve_implied_volatility_minimize(self, S: float, D: float, target_cds_spread: float, R: float = 0.4,
                                         vol_min: float = 0.01, vol_max: float = 2.0) -> Optional[float]:
         """
-        使用最小化方法求解隐含波动率
+        use minimization method to solve implied volatility
         
         Parameters:
         -----------
+        S : float
+            stock price
+        D : float
+            debt per share
         target_cds_spread : float
-            目标CDS价差
+            target CDS spread
         R : float
-            回收率
+            recovery rate
         vol_min : float
-            波动率搜索下界
+            volatility search lower bound
         vol_max : float
-            波动率搜索上界
+            volatility search upper bound
             
         Returns:
         --------
-        Optional[float] : 隐含波动率，如果求解失败返回None
+        Optional[float] : implied volatility, if the solution fails, return None
         """
         
         def obj_func_abs(sigma):
-            return abs(self.objective_function(sigma, target_cds_spread, R))
+            return abs(self.objective_function(S, D, sigma, target_cds_spread, R))
         
         try:
             result = minimize_scalar(
@@ -314,7 +339,7 @@ class CDSImpliedVolatilitySolver:
             
             if result.success:
                 implied_vol = result.x
-                verification_spread = self.calculate_cds_spread_continuous(self.S, implied_vol, R)
+                verification_spread = self.calculate_cds_spread_continuous(S, D, implied_vol, R)
                 error = abs(verification_spread - target_cds_spread)
                 
                 # logger.info(f"最小化方法求解成功:")
@@ -332,13 +357,17 @@ class CDSImpliedVolatilitySolver:
             logger.error(f"最小化方法求解出错: {e}")
             return None
     
-    def solve_implied_volatility(self, target_cds_spread: float, R: float = 0.4,
+    def solve_implied_volatility(self, S: float, D: float, target_cds_spread: float, R: float = 0.4,
                                method: str = 'brent', **kwargs) -> Optional[float]:
         """
         求解隐含波动率的主接口
         
         Parameters:
         -----------
+        S : float
+            stock price
+        D : float
+            debt per share
         target_cds_spread : float
             目标CDS价差 (可以是基点形式，会自动转换)
         R : float
@@ -362,10 +391,10 @@ class CDSImpliedVolatilitySolver:
         # logger.info(f"目标CDS价差: {target_cds_spread:.6f} ({target_cds_spread*10000:.1f}bp)")
         
         if method.lower() == 'brent':
-            implied_vol,error =  self.solve_implied_volatility_brent(target_cds_spread, R, **kwargs)
+            implied_vol,error =  self.solve_implied_volatility_brent(S, D, target_cds_spread, R, **kwargs)
             return implied_vol,error
         elif method.lower() == 'minimize':
-            implied_vol,error = self.solve_implied_volatility_minimize(target_cds_spread, R, **kwargs)
+            implied_vol,error = self.solve_implied_volatility_minimize(S, D, target_cds_spread, R, **kwargs)
             return implied_vol,error
         else:
             logger.error(f"不支持的求解方法: {method}")
@@ -387,7 +416,7 @@ def demo_implied_volatility():
     lamb = 0.3       # 违约壁垒参数
     
     # 创建求解器
-    solver = CDSImpliedVolatilitySolver(S, D, t, r, L, lamb)
+    solver = CDSImpliedVolatilitySolver(t, r, L, lamb)
     
     # 测试案例：给定不同的市场CDS价差，求解隐含波动率
     test_cases = [100, 200, 300, 500]  # 基点
@@ -397,21 +426,21 @@ def demo_implied_volatility():
         
         # 使用Brent方法求解
         implied_vol_brent = solver.solve_implied_volatility(
-            market_spread_bp, R, method='brent'
+            S, D, market_spread_bp, R, method='brent'
         )
         
         # 使用最小化方法求解
         implied_vol_minimize = solver.solve_implied_volatility(
-            market_spread_bp, R, method='minimize'
+            S, D, market_spread_bp, R, method='minimize'
         )
         
         if implied_vol_brent is not None:
             # 验证结果
-            verification_spread = solver.calculate_cds_spread_continuous(solver.S, implied_vol_brent, R)
+            verification_spread = solver.calculate_cds_spread_continuous(S, D, implied_vol_brent, R)
             logger.info(f"Brent方法结果验证: 模型价差 = {verification_spread*10000:.2f}bp")
         
         if implied_vol_minimize is not None:
-            verification_spread = solver.calculate_cds_spread_continuous(solver.S, implied_vol_minimize, R)
+            verification_spread = solver.calculate_cds_spread_continuous(S, D, implied_vol_minimize, R)
             logger.info(f"最小化方法结果验证: 模型价差 = {verification_spread*10000:.2f}bp")
 
 
@@ -431,23 +460,28 @@ def test_consistency_with_cgm_core():
     test_sigma = 0.3  # 测试用的波动率
     
     # 创建求解器
-    solver = CDSImpliedVolatilitySolver(S, D, t, r, L, lamb)
+    solver = CDSImpliedVolatilitySolver(t, r, L, lamb)
     
     # 计算CDS价差
-    cds_spread = solver.calculate_cds_spread_continuous(S, test_sigma, R)
+    cds_spread = solver.calculate_cds_spread_continuous(S, D, test_sigma, R)
     logger.info(f"使用波动率 {test_sigma:.4f} 计算的CDS价差: {cds_spread:.6f} ({cds_spread*10000:.2f}bp)")
     
     # 现在反解波动率
     logger.info(f"\n从CDS价差 {cds_spread*10000:.2f}bp 反解波动率:")
     
-    implied_vol = solver.solve_implied_volatility(cds_spread, R, method='brent')
+    implied_vol = solver.solve_implied_volatility(S, D, cds_spread, R, method='brent')
     
     if implied_vol is not None:
         error = abs(implied_vol[0] - test_sigma)
+
         logger.info(f"原始波动率: {test_sigma:.6f}")
+
         logger.info(f"隐含波动率: {implied_vol[0]:.6f}")
+
         logger.info(f"绝对误差: {error:.8f}")
+
         logger.info(f"相对误差: {error/test_sigma:.6%}")
+
         
         if error < 1e-4:
             logger.info("✓ 一致性测试通过!")

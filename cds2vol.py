@@ -133,7 +133,7 @@ def MultiDay_CDSImpliedVolatilitySolver(df):
     Returns:
     """
 
-    D = 150.0        # debt per share
+    # D = 150.0        # debt per share
     t = 5.0          # CDS tenor
     r = 0.05         # risk free rate
     R = 0.4          # recovery rate

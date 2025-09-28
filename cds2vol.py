@@ -133,25 +133,26 @@ def MultiDay_CDSImpliedVolatilitySolver(df):
     Returns:
     """
 
-    t = 5.0          # CDS期限
-    r = 0.05         # 无风险利率
-    R = 0.4          # 回收率
-    L = 0.5          # 债务回收率
-    lamb = 0.3       # 违约壁垒参数
-    from tqdm import tqdm
-    # 先创建新列
+    D = 150.0        # debt per share
+    t = 5.0          # CDS tenor
+    r = 0.05         # risk free rate
+    R = 0.4          # recovery rate
+    L = 0.5          # loss given default
+    lamb = 0.3       # barrier deviation
+    notional = 100000000        
+    cds_coupon = 0.01
+
+    # create new columns
     df['implied_vol'] = np.nan 
     df['par_spread_error'] = np.nan
+    solver = CDSImpliedVolatilitySolver(t, r, L, lamb, notional, cds_coupon)
 
     with redirect_stdout(StringIO()):
         for i, row in tqdm(df.iterrows()):
-            # 参数设置
-
-            solver = CDSImpliedVolatilitySolver(row['close_price'], row['financial_debt_ratio'], t, r, L, lamb)
-
-            # 从市场CDS价差反解波动率
-            market_cds_spread = row['parspread']  # 250bp
-            implied_vol,error = solver.solve_implied_volatility(market_cds_spread, R, method='brent');
+            # vol calculation by upfront price
+            # this place we should use upfront instead of parspread considering the coupon payment 
+            market_cds_spread = row['upfront']  
+            implied_vol,error = solver.solve_implied_volatility(row['stock_price'], row['financial_debt_ratio'],market_cds_spread, row['cdsassumedrecovery'], method='brent');
             df.at[i, 'implied_vol'] = implied_vol
             df.at[i, 'par_spread_error'] = error
 

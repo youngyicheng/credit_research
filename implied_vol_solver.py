@@ -443,9 +443,9 @@ def test_consistency_with_cgm_core():
     implied_vol = solver.solve_implied_volatility(cds_spread, R, method='brent')
     
     if implied_vol is not None:
-        error = abs(implied_vol - test_sigma)
+        error = abs(implied_vol[0] - test_sigma)
         logger.info(f"原始波动率: {test_sigma:.6f}")
-        logger.info(f"隐含波动率: {implied_vol:.6f}")
+        logger.info(f"隐含波动率: {implied_vol[0]:.6f}")
         logger.info(f"绝对误差: {error:.8f}")
         logger.info(f"相对误差: {error/test_sigma:.6%}")
         

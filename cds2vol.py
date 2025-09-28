@@ -212,4 +212,5 @@ if __name__ == '__main__':
     df = MultiDay_CDSImpliedVolatilitySolver(df)
     df = greek_calc(df)
     # print(df)
-    df.to_csv('res/cds2vol.csv')
+    ticker = str(df['ticker'].iloc[0])
+    df.to_csv(f'res/{ticker}.csv')

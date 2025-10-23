@@ -624,12 +624,15 @@ class CDSImpliedVolatilitySolver:
         if h is None:
             h = max(1e-4 * S, 1.0)
 
+        assert self.cds_quote_type in {CDSQuoteType.PAR_SPREAD, CDSQuoteType.UPFRONT}, "Not implemented yet"
+
         # Calculate CDS spread at S+h and S-h
-        if cds_coupon is None:
+        if self.cds_quote_type == CDSQuoteType.PAR_SPREAD:
             # almost never used
             f_up = self.calculate_cds_spread_continuous(S + h, D, sigma, R)
             f_dn = self.calculate_cds_spread_continuous(S - h, D, sigma, R)
         else:
+            assert cds_coupon, "cds_coupon needed for upfront calc"
             f_up = self.calculate_cds_upfront(S + h, D, sigma, R, cds_coupon)
             f_dn = self.calculate_cds_upfront(S - h, D, sigma, R, cds_coupon)
 

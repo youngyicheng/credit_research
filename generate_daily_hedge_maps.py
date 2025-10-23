@@ -12,7 +12,7 @@ from io import StringIO
 from contextlib import redirect_stdout
 import pickle
 
-from deltaHedge import DeltaHedgeStrategy
+from delta_hedge import DeltaHedgeStrategy
 from implied_vol_solver import CDSImpliedVolatilitySolver, CDSQuoteType
 
 

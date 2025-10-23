@@ -39,7 +39,7 @@ class DeltaHedgeStrategy:
 
     def generate_stock_share_table(
         self,
-        current_price,
+        current_price: float,
         D: float,
         implied_vol: float,
         R: float,

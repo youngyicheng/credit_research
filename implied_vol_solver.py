@@ -57,7 +57,6 @@ class CDSImpliedVolatilitySolver:
         r: float,
         L: float = 0.5,
         lamb: float = 0.3,
-        notional: float = 100_000_000,
         cds_quote_type: CDSQuoteType = CDSQuoteType.UPFRONT,
     ):
         """
@@ -65,10 +64,6 @@ class CDSImpliedVolatilitySolver:
 
         Parameters:
         -----------
-        S : float
-            stock price
-        D : float
-            debt per share
         t : float
             CDS tenor (year)
         r : float
@@ -77,19 +72,16 @@ class CDSImpliedVolatilitySolver:
             global debt recovery rate (default 0.5)
         lamb : float
             default 0.3 (default barrier standard deviation)
-        notional : float
-            notional of CDS
         """
         self.t = t
         self.r = r
         self.L = L
         self.lamb = lamb
-        self.notional = notional
         self.cds_quote_type = cds_quote_type
 
         logger.info(f"CDS implied volatility solver initialized")
         logger.info(
-            f"parameters: {t=}, {r=}, {L=}, {lamb=}, {L=}, {notional=}, {cds_quote_type=}"
+            f"parameters: {t=}, {r=}, {L=}, {lamb=}, {L=}, {cds_quote_type=}"
         )
 
     def V_0(self, S: float, D: float) -> float:
@@ -99,7 +91,7 @@ class CDSImpliedVolatilitySolver:
         return S + self.L * D
 
     def calculate_survival_probability(
-        self, S: float, D: float, t: float, sigma: float
+        self, S: float, D: float, sigma: float, t: float
     ) -> float:
         """
         计算生存概率 P(t) - 基于公式 2.11
@@ -111,10 +103,10 @@ class CDSImpliedVolatilitySolver:
             stock price
         D : float
             debt per share
-        t : float
-            time to maturity (year)
         sigma : float
             资产波动率 sigma
+        t : float
+            time to maturity (year)
 
         Returns:
         --------
@@ -151,7 +143,7 @@ class CDSImpliedVolatilitySolver:
         return survival_prob
 
     def _calculate_G_function_approximate(
-        self, S: float, D: float, u: float, sigma: float
+        self, S: float, D: float, sigma: float, u: float
     ) -> float:
         """
         G函数的近似计算 (公式2.16的简化版本)
@@ -163,10 +155,10 @@ class CDSImpliedVolatilitySolver:
             stock price
         D : float
             debt per share
-        u : float
-            自变量
         sigma : float
             资产波动率
+        u : float
+            自变量
 
         Returns:
         --------
@@ -211,14 +203,14 @@ class CDSImpliedVolatilitySolver:
 
         # 计算 P(0) 和 P(t) - 与cgm_core.py完全一致
         P_0 = self.calculate_survival_probability(
-            S=S, D=D, t=0.001, sigma=sigma
+            S=S, D=D, sigma=sigma, t=0.001
         )  # t=0的近似值
-        P_t = self.calculate_survival_probability(S=S, D=D, t=self.t, sigma=sigma)
+        P_t = self.calculate_survival_probability(S=S, D=D, sigma=sigma, t=self.t)
 
         # 计算G函数相关项 (简化版本，完整实现需要公式2.16) - 与cgm_core.py完全一致
         G_term = self._calculate_G_function_approximate(
-            S=S, D=D, u=self.t + xi, sigma=sigma
-        ) - self._calculate_G_function_approximate(S=S, D=D, u=xi, sigma=sigma)
+            S=S, D=D, sigma=sigma, u=self.t + xi
+        ) - self._calculate_G_function_approximate(S=S, D=D, sigma=sigma, u=xi)
 
         # A.14
         H = np.exp(self.r * xi) * G_term
@@ -262,7 +254,7 @@ class CDSImpliedVolatilitySolver:
         return numerator / denominator
 
     def calculate_cds_upfront(
-        self, S: float, D: float, sigma: float, cds_coupon: float = 0.01, R: float = 0.4
+        self, S: float, D: float, sigma: float, R: float = 0.4, cds_coupon: float = 0.01
     ) -> float:
         """
 
@@ -276,10 +268,10 @@ class CDSImpliedVolatilitySolver:
             debt per share
         sigma : float
             资产波动率 sigma
-        cds_coupon : float
-            CDS coupon (e.g., 0.01 for 100bp)
         R : float
             回收率 (默认0.4，即40%)
+        cds_coupon : float
+            CDS coupon (e.g., 0.01 for 100bp)
 
         Returns:
         --------
@@ -324,6 +316,8 @@ class CDSImpliedVolatilitySolver:
             目标CDS quote (市场观察值)
         R : float
             回收率
+        cds_coupon : Optional[float]
+            CDS coupon (required for upfront calculations)
 
         Returns:
         --------
@@ -337,7 +331,7 @@ class CDSImpliedVolatilitySolver:
             model_quote = (
                 self.calculate_cds_spread_continuous(S, D, sigma, R)
                 if self.cds_quote_type == CDSQuoteType.PAR_SPREAD
-                else self.calculate_cds_upfront(S, D, sigma, cds_coupon, R)
+                else self.calculate_cds_upfront(S, D, sigma, R, cds_coupon)
             )
             return model_quote - target_cds_quote
         except Exception as e:
@@ -351,14 +345,16 @@ class CDSImpliedVolatilitySolver:
         D: float,
         implied_vol: float,
         target_cds_quote: float,
-        cds_coupon: Optional[float] = None,
         R: float = 0.4,
+        cds_coupon: Optional[float] = None,
     ) -> float:
         """
         验证隐含波动率结果
 
         Parameters:
         -----------
+        method : str
+            method name
         S : float
             stock price
         D : float
@@ -369,6 +365,8 @@ class CDSImpliedVolatilitySolver:
             目标CDS quote (市场观察值)
         R : float
             回收率
+        cds_coupon : Optional[float]
+            CDS coupon (required for upfront calculations)
 
         Returns:
         --------
@@ -382,7 +380,7 @@ class CDSImpliedVolatilitySolver:
         verification_quote = (
             self.calculate_cds_spread_continuous(S, D, implied_vol, R)
             if self.cds_quote_type == CDSQuoteType.PAR_SPREAD
-            else self.calculate_cds_upfront(S, D, implied_vol, cds_coupon, R)
+            else self.calculate_cds_upfront(S, D, implied_vol, R, cds_coupon)
         )
         error = abs(verification_quote - target_cds_quote)
 
@@ -399,8 +397,8 @@ class CDSImpliedVolatilitySolver:
         S: float,
         D: float,
         target_cds_quote: float,
-        cds_coupon: Optional[float] = None,
         R: float = 0.4,
+        cds_coupon: Optional[float] = None,
         vol_min: float = 0.01,
         vol_max: float = 2.0,
         tolerance: float = 1e-6,
@@ -414,10 +412,12 @@ class CDSImpliedVolatilitySolver:
             stock price
         D : float
             debt per share
-        target_cds_spread : float
-            目标CDS价差 (市场观察值)
+        target_cds_quote : float
+            目标CDS quote (市场观察值)
         R : float
             回收率
+        cds_coupon : Optional[float]
+            CDS coupon (required for upfront calculations)
         vol_min : float
             波动率搜索下界
         vol_max : float
@@ -432,7 +432,7 @@ class CDSImpliedVolatilitySolver:
 
         def obj_func(sigma):
             return self.objective_function(
-                S, D, sigma, target_cds_quote, R, cds_coupon=cds_coupon
+                S, D, sigma, target_cds_quote, R, cds_coupon
             )
 
         try:
@@ -462,7 +462,7 @@ class CDSImpliedVolatilitySolver:
             # 使用Brent方法求解
             implied_vol = brentq(obj_func, vol_min, vol_max, xtol=tolerance)
             error = self.verify_results(
-                "Brent", S, D, implied_vol, target_cds_quote, cds_coupon=cds_coupon, R=R
+                "Brent", S, D, implied_vol, target_cds_quote, R, cds_coupon
             )
 
             return implied_vol, error
@@ -476,8 +476,8 @@ class CDSImpliedVolatilitySolver:
         S: float,
         D: float,
         target_cds_spread: float,
-        cds_coupon: Optional[float] = None,
         R: float = 0.4,
+        cds_coupon: Optional[float] = None,
         vol_min: float = 0.01,
         vol_max: float = 2.0,
     ) -> Optional[float]:
@@ -494,6 +494,8 @@ class CDSImpliedVolatilitySolver:
             target CDS spread
         R : float
             recovery rate
+        cds_coupon : Optional[float]
+            CDS coupon (required for upfront calculations)
         vol_min : float
             volatility search lower bound
         vol_max : float
@@ -507,7 +509,7 @@ class CDSImpliedVolatilitySolver:
         def obj_func_abs(sigma):
             return abs(
                 self.objective_function(
-                    S, D, sigma, target_cds_spread, R, cds_coupon=cds_coupon
+                    S, D, sigma, target_cds_spread, R, cds_coupon
                 )
             )
 
@@ -524,8 +526,8 @@ class CDSImpliedVolatilitySolver:
                     D,
                     implied_vol,
                     target_cds_spread,
-                    cds_coupon=cds_coupon,
-                    R=R,
+                    R,
+                    cds_coupon,
                 )
             else:
                 logger.error("最小化方法求解失败")
@@ -540,8 +542,8 @@ class CDSImpliedVolatilitySolver:
         S: float,
         D: float,
         target_cds_quote: float,
-        cds_coupon: Optional[float] = None,
         R: float = 0.4,
+        cds_coupon: Optional[float] = None,
         method: str = "brent",
         **kwargs,
     ) -> Optional[float]:
@@ -558,6 +560,8 @@ class CDSImpliedVolatilitySolver:
             目标CDS quote
         R : float
             回收率
+        cds_coupon : Optional[float]
+            CDS coupon (required for upfront calculations)
         method : str
             求解方法 ('brent', 'minimize')
         **kwargs :
@@ -579,12 +583,12 @@ class CDSImpliedVolatilitySolver:
 
         if method.lower() == "brent":
             implied_vol, error = self.solve_implied_volatility_brent(
-                S, D, target_cds_quote, cds_coupon, R, **kwargs
+                S, D, target_cds_quote, R, cds_coupon, **kwargs
             )
             return implied_vol, error
         elif method.lower() == "minimize":
             implied_vol, error = self.solve_implied_volatility_minimize(
-                S, D, target_cds_quote, cds_coupon, R, **kwargs
+                S, D, target_cds_quote, R, cds_coupon, **kwargs
             )
             return implied_vol, error
         else:
@@ -592,7 +596,7 @@ class CDSImpliedVolatilitySolver:
             return None
 
     def delta_calculation(
-        self, S: float, D: float, implied_vol: float, R: float, h: float = None
+        self, S: float, D: float, sigma: float, R: float, cds_coupon: Optional[float] = None, h: Optional[float] = None
     ) -> float:
         """
         Calculate delta - first derivative of CDS spread with respect to stock price
@@ -603,10 +607,12 @@ class CDSImpliedVolatilitySolver:
             stock price
         D : float
             debt per share
-        implied_vol : float
+        sigma : float
             implied volatility
         R : float
             recovery rate
+        cds_coupon : float, optional
+            CDS coupon (required for upfront calculations)
         h : float, optional
             step size (default is 1e-4 * S or 1.0, whichever is larger)
 
@@ -618,9 +624,17 @@ class CDSImpliedVolatilitySolver:
         if h is None:
             h = max(1e-4 * S, 1.0)
 
+        assert self.cds_quote_type in {CDSQuoteType.PAR_SPREAD, CDSQuoteType.UPFRONT}, "Not implemented yet"
+
         # Calculate CDS spread at S+h and S-h
-        f_up = self.calculate_cds_spread_continuous(S + h, D, implied_vol, R)
-        f_dn = self.calculate_cds_spread_continuous(S - h, D, implied_vol, R)
+        if self.cds_quote_type == CDSQuoteType.PAR_SPREAD:
+            # almost never used
+            f_up = self.calculate_cds_spread_continuous(S + h, D, sigma, R)
+            f_dn = self.calculate_cds_spread_continuous(S - h, D, sigma, R)
+        else:
+            assert cds_coupon, "cds_coupon needed for upfront calc"
+            f_up = self.calculate_cds_upfront(S + h, D, sigma, R, cds_coupon)
+            f_dn = self.calculate_cds_upfront(S - h, D, sigma, R, cds_coupon)
 
         # Central difference formula for first derivative
         delta = (f_up - f_dn) / (2.0 * h)
@@ -628,10 +642,11 @@ class CDSImpliedVolatilitySolver:
         return delta
 
     def gamma_calculation(
-        self, S: float, D: float, implied_vol: float, R: float, h: float = None
+        self, S: float, D: float, sigma: float, R: float, cds_coupon: Optional[float] = None, h: Optional[float] = None
     ) -> float:
         """
         Calculate gamma - second derivative of CDS spread with respect to stock price
+        Computed as the numerical derivative of delta
 
         Parameters:
         -----------
@@ -639,10 +654,12 @@ class CDSImpliedVolatilitySolver:
             stock price
         D : float
             debt per share
-        implied_vol : float
+        sigma : float
             implied volatility
         R : float
             recovery rate
+        cds_coupon : float, optional
+            CDS coupon (required for upfront calculations)
         h : float, optional
             step size (default is 1e-4 * S or 1.0, whichever is larger)
 
@@ -654,13 +671,12 @@ class CDSImpliedVolatilitySolver:
         if h is None:
             h = max(1e-4 * S, 1.0)
 
-        # Calculate CDS spread at S+h, S, and S-h
-        f_up = self.calculate_cds_spread_continuous(S + h, D, implied_vol, R)
-        f_mid = self.calculate_cds_spread_continuous(S, D, implied_vol, R)
-        f_dn = self.calculate_cds_spread_continuous(S - h, D, implied_vol, R)
+        # Calculate delta at S+h and S-h
+        delta_up = self.delta_calculation(S + h, D, sigma, R, cds_coupon, h)
+        delta_dn = self.delta_calculation(S - h, D, sigma, R, cds_coupon, h)
 
-        # Central difference formula for second derivative
-        gamma = (f_up - 2.0 * f_mid + f_dn) / (h**2)
+        # Central difference formula for derivative of delta
+        gamma = (delta_up - delta_dn) / (2.0 * h)
 
         return gamma
 

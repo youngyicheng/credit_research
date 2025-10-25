@@ -2,6 +2,7 @@
 Generate daily delta hedge maps for historical CDS data.
 """
 
+from typing import Optional
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -11,23 +12,24 @@ from io import StringIO
 from contextlib import redirect_stdout
 import pickle
 
-from deltaHedge import DeltaHedgeStrategy
+from delta_hedge import DeltaHedgeStrategy
 from implied_vol_solver import CDSImpliedVolatilitySolver, CDSQuoteType
 
 
-def generate_daily_hedge_maps(
+def generate_daily_stock_share_maps(
     df: pd.DataFrame,
     t: float = 5.0,
     r: float = 0.05,
     L: float = 0.5,
     lamb: float = 0.3,
     notional: float = 10_000_000,
-    price_range_pct: float = 0.20,
     price_step_pct: float = 0.01,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
     output_dir: str = "hedge_maps",
 ):
     """
-    Generate daily delta hedge maps from historical data.
+    Generate daily stock share maps from historical data.
 
     Parameters:
     -----------
@@ -55,7 +57,7 @@ def generate_daily_hedge_maps(
     dict : Dictionary mapping dates to hedge dictionaries
     """
     # Create solver and strategy objects
-    solver = CDSImpliedVolatilitySolver(t, r, L, lamb, notional)
+    solver = CDSImpliedVolatilitySolver(t, r, L, lamb)
     hedge_strategy = DeltaHedgeStrategy(solver, notional)
 
     # Make sure output directory exists
@@ -86,12 +88,13 @@ def generate_daily_hedge_maps(
                     continue
 
                 # Generate hedge table for this date
-                hedge_dict = hedge_strategy.generate_hedge_table(
+                hedge_dict = hedge_strategy.generate_stock_share_table(
                     current_price=current_price,
                     D=D,
                     implied_vol=implied_vol,
                     R=R,
-                    price_range_pct=price_range_pct,
+                    min_price=min_price,
+                    max_price=max_price,
                     price_step_pct=price_step_pct,
                 )
 
@@ -132,7 +135,7 @@ if __name__ == "__main__":
     r = 0.05  # risk-free rate
     L = 0.5  # loss given default
     lamb = 0.3  # barrier deviation
-    notional = 10_000_000  # CDS notional amount
+    notional = -100_000_000  # negative for sell CDS protection/buy stock
 
     # Generate hedge maps
     hedge_maps = generate_daily_hedge_maps(df, t, r, L, lamb, notional)

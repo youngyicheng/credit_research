@@ -37,51 +37,50 @@ class DeltaHedgeStrategy:
         self.notional = notional
         self.logger = logging.getLogger(__name__)
 
-    def generate_hedge_table(
+    def generate_stock_share_table(
         self,
         current_price: float,
         D: float,
         implied_vol: float,
         R: float,
-        price_range_pct: float = 0.20,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
         price_step_pct: float = 0.01,
     ) -> Dict[float, int]:
         """
-        Generate a dictionary mapping stock prices to required hedge positions.
+        Generate a hedge table mapping stock prices to required share positions for delta hedging.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         current_price : float
-            Current stock price
+            The current stock price.
         D : float
             Debt per share
         implied_vol : float
             Implied volatility
         R : float
-            Recovery rate
-        price_range_pct : float
-            Price range percentage (default 20%)
-        price_step_pct : float
-            Price step percentage (default 1%)
+            Recovery rate.
+        min_price : float, optional
+            Minimum stock price in the range (default: 80% of current_price).
+        max_price : float, optional
+            Maximum stock price in the range (default: 120% of current_price).
+        price_step_pct : float, optional
+            Step between stock prices as a percent of current_price (default: 0.01 = 1%).
 
-        Returns:
-        --------
-        Dict[float, int] : Dictionary mapping prices to share quantities
+        Returns
+        -------
+        Dict[float, int]
+            Dictionary mapping each evaluated stock price (rounded to 2 decimals) to the required number of shares for delta hedging at that price.
         """
-        # Calculate price range
-        min_price = current_price * (1 - price_range_pct)
-        max_price = current_price * (1 + price_range_pct)
-
-        # Generate price points
-        price_steps = int(price_range_pct * 2 / price_step_pct) + 1
+        min_price = min_price or current_price * 0.8
+        max_price = max_price or current_price * 1.2
+        
+        # Calculate price points
+        price_steps = int(round((max_price - min_price) / (current_price * price_step_pct))) + 1
         price_points = np.linspace(min_price, max_price, price_steps)
 
-        # Initialize hedge dictionary
-        hedge_dict = {}
-
-        # Calculate current delta for reference
-        current_delta = self.solver.delta_calculation(current_price, D, implied_vol, R)
-        current_position = self.calculate_required_shares(current_delta)
+        # Initialize stock shares dictionary
+        stock_shares_dict = {}
 
         # For each price point, calculate required position
         for price in price_points:
@@ -91,13 +90,10 @@ class DeltaHedgeStrategy:
             # Calculate required shares
             required_shares = self.calculate_required_shares(delta)
 
-            # Calculate trade size (positive for buy, negative for sell)
-            trade_size = required_shares - current_position
-
             # Store in dictionary with rounded price as key
-            hedge_dict[round(price, 2)] = round(trade_size)
+            stock_shares_dict[round(price, 2)] = round(required_shares)
 
-        return hedge_dict
+        return stock_shares_dict
 
     def calculate_required_shares(self, delta: float) -> int:
         """
@@ -114,12 +110,11 @@ class DeltaHedgeStrategy:
         --------
         int : Number of shares required for delta neutrality
         """
-        # For sell CDS buy stock strategy, take negative of delta
-        return int(-1 * delta * self.notional / 1.0)
+        # For sell CDS/buy stock strategy, delta is positive, in which case self.notional is negative
+        return int(delta * self.notional / 1.0)
 
     def calculate_trade_size(
         self,
-        current_price: float,
         new_price: float,
         D: float,
         implied_vol: float,
@@ -186,9 +181,13 @@ class DeltaHedgeStrategy:
         price_step_pct : float
             Price step percentage (default 1%)
         """
+        # Calculate min and max prices from range percentage
+        min_price = current_price * (1 - price_range_pct)
+        max_price = current_price * (1 + price_range_pct)
+        
         # Generate hedge table
         hedge_dict = self.generate_hedge_table(
-            current_price, D, implied_vol, R, price_range_pct, price_step_pct
+            current_price, D, implied_vol, R, min_price, max_price, price_step_pct
         )
 
         # Convert to DataFrame for plotting
@@ -314,7 +313,7 @@ if __name__ == "__main__":
     cds_coupon = 0.01
 
     # Create solver and strategy objects
-    solver = CDSImpliedVolatilitySolver(t, r, L, lamb, notional)
+    solver = CDSImpliedVolatilitySolver(t, r, L, lamb)
     strategy = DeltaHedgeStrategy(solver, notional)
 
     # Example parameters

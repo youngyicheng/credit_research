@@ -77,6 +77,7 @@ def generate_daily_stock_share_maps(
                 D = row["financial_debt_ratio"]
                 implied_vol = row["implied_vol"]
                 R = row["cdsassumedrecovery"]
+                cds_coupon = row["runningcoupon"]
 
                 # Skip if any required parameter is missing
                 if (
@@ -93,6 +94,7 @@ def generate_daily_stock_share_maps(
                     D=D,
                     implied_vol=implied_vol,
                     R=R,
+                    cds_coupon=cds_coupon,
                     min_price=min_price,
                     max_price=max_price,
                     price_step_pct=price_step_pct,

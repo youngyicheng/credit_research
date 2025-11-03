@@ -86,7 +86,8 @@ def generate_daily_stock_share_maps(
                     or pd.isna(implied_vol)
                     or pd.isna(R)
                 ):
-                    continue
+
+                #     continue
 
                 # Generate hedge table for this date
                 hedge_dict = hedge_strategy.generate_stock_share_table(
@@ -121,9 +122,9 @@ def generate_daily_stock_share_maps(
                 print(f"Error processing row for date {i}: {e}")
                 continue
 
-    # Save the complete hedge map dictionary
-    with open(f"{output_dir}/all_hedge_maps.pkl", "wb") as f:
-        pickle.dump(hedge_maps, f)
+        # Save the complete hedge map dictionary
+        with open(f"{output_dir}/all_hedge_maps.pkl", "wb") as f:
+            pickle.dump(hedge_maps, f)
 
     return hedge_maps
 
@@ -134,13 +135,20 @@ if __name__ == "__main__":
 
     # Parameters
     t = 5.0  # CDS tenor
-    r = 0.05  # risk-free rate
+    r = 0.05  # risk free rate
+    R = 0.4  # recovery rate
     L = 0.5  # loss given default
     lamb = 0.3  # barrier deviation
-    notional = -100_000_000  # negative for sell CDS protection/buy stock
+    notional = -1_000_000  # negative for sell CDS protection/buy stock
+    cds_coupon = 0.01
+    # in practice, the below are chosen based on liquidity of hedging options, expected range of stock movement, among other things
+    min_stk_px = 7.0
+    max_stk_px = 15.0
 
     # Generate hedge maps
-    hedge_maps = generate_daily_hedge_maps(df, t, r, L, lamb, notional)
+    hedge_maps = generate_daily_stock_share_maps(
+        df, t, r, L, lamb, notional, min_price=min_stk_px, max_price=max_stk_px
+    )
 
     # Print summary
     print(f"Generated hedge maps for {len(hedge_maps)} trading days")
@@ -152,3 +160,5 @@ if __name__ == "__main__":
     prices = sorted(list(first_hedge_map.keys()))[:5]  # Show first 5 price points
     for price in prices:
         print(f"${price:.2f} -> {int(first_hedge_map[price]):+,d} shares")
+
+

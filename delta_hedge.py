@@ -43,6 +43,7 @@ class DeltaHedgeStrategy:
         D: float,
         implied_vol: float,
         R: float,
+        cds_coupon: float,
         min_price: Optional[float] = None,
         max_price: Optional[float] = None,
         price_step_pct: float = 0.01,
@@ -74,9 +75,11 @@ class DeltaHedgeStrategy:
         """
         min_price = min_price or current_price * 0.8
         max_price = max_price or current_price * 1.2
-        
+
         # Calculate price points
-        price_steps = int(round((max_price - min_price) / (current_price * price_step_pct))) + 1
+        price_steps = (
+            int(round((max_price - min_price) / (current_price * price_step_pct))) + 1
+        )
         price_points = np.linspace(min_price, max_price, price_steps)
 
         # Initialize stock shares dictionary
@@ -85,7 +88,7 @@ class DeltaHedgeStrategy:
         # For each price point, calculate required position
         for price in price_points:
             # Calculate delta at this price
-            delta = self.solver.delta_calculation(price, D, implied_vol, R)
+            delta = self.solver.delta_calculation(price, D, implied_vol, R, cds_coupon)
 
             # Calculate required shares
             required_shares = self.calculate_required_shares(delta)
@@ -184,7 +187,7 @@ class DeltaHedgeStrategy:
         # Calculate min and max prices from range percentage
         min_price = current_price * (1 - price_range_pct)
         max_price = current_price * (1 + price_range_pct)
-        
+
         # Generate hedge table
         hedge_dict = self.generate_hedge_table(
             current_price, D, implied_vol, R, min_price, max_price, price_step_pct

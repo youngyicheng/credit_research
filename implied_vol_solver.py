@@ -80,9 +80,7 @@ class CDSImpliedVolatilitySolver:
         self.cds_quote_type = cds_quote_type
 
         logger.info(f"CDS implied volatility solver initialized")
-        logger.info(
-            f"parameters: {t=}, {r=}, {L=}, {lamb=}, {L=}, {cds_quote_type=}"
-        )
+        logger.info(f"parameters: {t=}, {r=}, {L=}, {lamb=}, {L=}, {cds_quote_type=}")
 
     def V_0(self, S: float, D: float) -> float:
         """
@@ -431,9 +429,7 @@ class CDSImpliedVolatilitySolver:
         """
 
         def obj_func(sigma):
-            return self.objective_function(
-                S, D, sigma, target_cds_quote, R, cds_coupon
-            )
+            return self.objective_function(S, D, sigma, target_cds_quote, R, cds_coupon)
 
         try:
             # 检查边界条件
@@ -508,9 +504,7 @@ class CDSImpliedVolatilitySolver:
 
         def obj_func_abs(sigma):
             return abs(
-                self.objective_function(
-                    S, D, sigma, target_cds_spread, R, cds_coupon
-                )
+                self.objective_function(S, D, sigma, target_cds_spread, R, cds_coupon)
             )
 
         try:
@@ -596,7 +590,13 @@ class CDSImpliedVolatilitySolver:
             return None
 
     def delta_calculation(
-        self, S: float, D: float, sigma: float, R: float, cds_coupon: Optional[float] = None, h: Optional[float] = None
+        self,
+        S: float,
+        D: float,
+        sigma: float,
+        R: float,
+        cds_coupon: Optional[float] = None,
+        h: Optional[float] = None,
     ) -> float:
         """
         Calculate delta - first derivative of CDS spread with respect to stock price
@@ -624,7 +624,10 @@ class CDSImpliedVolatilitySolver:
         if h is None:
             h = max(1e-4 * S, 1.0)
 
-        assert self.cds_quote_type in {CDSQuoteType.PAR_SPREAD, CDSQuoteType.UPFRONT}, "Not implemented yet"
+        assert self.cds_quote_type in {
+            CDSQuoteType.PAR_SPREAD,
+            CDSQuoteType.UPFRONT,
+        }, "Not implemented yet"
 
         # Calculate CDS spread at S+h and S-h
         if self.cds_quote_type == CDSQuoteType.PAR_SPREAD:
@@ -642,7 +645,13 @@ class CDSImpliedVolatilitySolver:
         return delta
 
     def gamma_calculation(
-        self, S: float, D: float, sigma: float, R: float, cds_coupon: Optional[float] = None, h: Optional[float] = None
+        self,
+        S: float,
+        D: float,
+        sigma: float,
+        R: float,
+        cds_coupon: Optional[float] = None,
+        h: Optional[float] = None,
     ) -> float:
         """
         Calculate gamma - second derivative of CDS spread with respect to stock price

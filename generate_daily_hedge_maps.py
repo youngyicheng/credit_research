@@ -86,8 +86,7 @@ def generate_daily_stock_share_maps(
                     or pd.isna(implied_vol)
                     or pd.isna(R)
                 ):
-
-                #     continue
+                    continue
 
                 # Generate hedge table for this date
                 hedge_dict = hedge_strategy.generate_stock_share_table(

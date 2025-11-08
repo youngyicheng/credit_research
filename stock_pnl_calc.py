@@ -1,51 +1,57 @@
+from dataclasses import dataclass
+import datetime
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
+BPS = 10000
 
-def calculate_daily_pnl(
+
+@dataclass(frozen=True)
+class TradeType:
+    """Trade type labels for tracking different types of trades"""
+    INITIAL_POSITION: str = 'initial_position'
+    CLOSE_POSITION: str = 'close_position'
+    REBALANCING: str = 'rebalancing'
+    NO_TRADE: str = 'no_trade'
+
+
+def calculate_pnl_w_static_stock_price_map(
     stock_data: pd.DataFrame,
-    sample_map: dict,
-    target_date: str,
+    stock_price_map: dict,
     transaction_cost_bps: float = 5.0,
+    stk_px_col: str = 'close',
 ) -> dict:
     """
-    Calculate daily PnL based on delta hedging strategy using minute-level stock data.
-    Starting from opening price with initial PnL = 0.
+    Calculate PnL based on trading map. Assumption is we are flat before and after.
 
     Parameters:
     -----------
     stock_data : pd.DataFrame
-        Minute-level stock data with columns: date, time, close, etc.
-    sample_map : dict
+        Minute-level stock data with columns: date, time, close, etc. (already filtered)
+    stock_price_map : dict
         Dictionary mapping stock prices to required share positions
-    target_date : str
-        Target date for PnL calculation (format: 'YYYY-MM-DD')
     transaction_cost_bps : float
         Transaction cost in basis points (default: 5 bps)
+    stk_px_col : str
+        Column name for stock price (default: 'close')
 
     Returns:
     --------
     dict : Dictionary containing PnL analysis results
     """
 
-    # Filter data for target date
-    daily_data = stock_data[stock_data["date"] == target_date].copy()
-
-    if daily_data.empty:
-        return {"error": f"No data found for date {target_date}"}
+    if stock_data.empty:
+        return {"error": "No data found in provided stock_data"}
 
     # Sort by time to ensure chronological order
-    daily_data = daily_data.sort_values("time").reset_index(drop=True)
+    stock_data = stock_data.sort_values(["date", "time"]).reset_index(drop=True)
 
-    # Get opening price and establish initial position
-    opening_price = daily_data.iloc[0]["close"]
+    # Get sorted price levels from stock_price_map for interpolation
+    price_levels = sorted(stock_price_map.keys())
+    target_positions = [stock_price_map[price] for price in price_levels]
 
-    # Get sorted price levels from sample_map for interpolation
-    price_levels = sorted(sample_map.keys())
-    target_positions = [sample_map[price] for price in price_levels]
-
-    def get_target_position(current_price):
+    def get_target_position(current_price: float) -> float:
         """Interpolate target position based on current stock price"""
         if current_price <= price_levels[0]:
             return target_positions[0]
@@ -55,81 +61,109 @@ def calculate_daily_pnl(
             # Linear interpolation
             return np.interp(current_price, price_levels, target_positions)
 
-    # Establish initial position based on opening price
-    initial_position = int(get_target_position(opening_price))
-    current_position = initial_position
+    def append_trade_log(trade_log: list, date: datetime.date, time: str, price: float, position_before: float, position_after: float, trade_type: str) -> float:
+        """Helper function to append trade information to the trade log"""
 
-    # Initialize tracking variables
-    cash_flow = (
-        -initial_position * opening_price
-    )  # Initial cash outflow for establishing position
-    total_transaction_cost = abs(initial_position * opening_price) * (
-        transaction_cost_bps / 10000
-    )
-    cash_flow -= total_transaction_cost
-    trade_log = []
-
-    # Log the initial trade
-    if initial_position != 0:
-        trade_log.append(
-            {
-                "time": daily_data.iloc[0]["time"],
-                "price": opening_price,
-                "trade_size": initial_position,
-                "trade_value": initial_position * opening_price,
-                "transaction_cost": total_transaction_cost,
-                "position_after": current_position,
-                "cumulative_cash_flow": cash_flow,
-                "trade_type": "initial_position",
-            }
-        )
-
-    # Process each subsequent minute (skip the first one as it's already processed)
-    for idx, row in daily_data.iloc[1:].iterrows():
-        current_price = row["close"]
-        current_time = row["time"]
-
-        # Get target position based on current price
-        target_position = int(get_target_position(current_price))
-
-        # Calculate required trade
-        trade_size = target_position - current_position
-
-        # Execute trade if needed
-        if trade_size != 0:
-            trade_value = trade_size * current_price
-            transaction_cost = abs(trade_value) * (transaction_cost_bps / 10000)
-
-            # Update positions and cash flow
-            current_position += trade_size
-            cash_flow -= trade_value  # Negative for buying, positive for selling
-            cash_flow -= transaction_cost
-            total_transaction_cost += transaction_cost
-
-            # Log the trade
+        trade_size = position_after - position_before
+        if trade_size == 0:
             trade_log.append(
                 {
-                    "time": current_time,
-                    "price": current_price,
+                    "date": date,
+                    "time": time,
+                    "price": price,
                     "trade_size": trade_size,
-                    "trade_value": trade_value,
-                    "transaction_cost": transaction_cost,
-                    "position_after": current_position,
-                    "cumulative_cash_flow": cash_flow,
-                    "trade_type": "rebalance",
+                    "trade_value": 0,
+                    "transaction_cost": 0,
+                    "position_after": position_after,
+                    "cash_flow": 0,
+                    "trade_type": TradeType.NO_TRADE,
                 }
             )
+            return position_after
+        
+        # Update positions and cash flow for non-zero trade size
+        trade_value = trade_size * price
+        transaction_cost = abs(trade_value) * (transaction_cost_bps / BPS)
+        cash_flow = -trade_value  # Negative for buying, positive for selling
+
+        trade_log.append(
+            {
+                "date": date,
+                "time": time,
+                "price": price,
+                "trade_size": trade_size,
+                "trade_value": trade_value,
+                "transaction_cost": transaction_cost,
+                "position_after": position_after,
+                "cash_flow": cash_flow,
+                "trade_type": trade_type,
+            }
+        )
+        return position_after
+
+    # Establish initial position based on opening price
+    # Get opening price and establish initial position
+    opening_price = stock_data.iloc[0][stk_px_col]
+    opening_date = stock_data.iloc[0]["date"]
+    opening_time = stock_data.iloc[0]["time"]
+    current_position = 0
+    initial_position = int(get_target_position(opening_price))
+    trade_log = []
+    
+    current_position = append_trade_log(
+        trade_log,
+        opening_date,
+        opening_time,
+        opening_price,
+        0,
+        initial_position,
+        TradeType.INITIAL_POSITION,
+    )
+
+    # Process each subsequent minute (skip the first one as it's already processed)
+    for _, row in stock_data.iloc[1:].iterrows():
+        current_price = row[stk_px_col]
+        current_date = row["date"]
+        current_time = row["time"]
+        # Get target position based on current price
+        target_position = int(get_target_position(current_price))
+        current_position = append_trade_log(
+            trade_log,
+            current_date,
+            current_time,
+            current_price,
+            current_position,
+            target_position,
+            TradeType.REBALANCING,
+        )
+
+    # Flatten the position at end of period
+    final_price = stock_data.iloc[-1][stk_px_col]
+    final_date = stock_data.iloc[-1]["date"]
+    final_time = stock_data.iloc[-1]["time"]
+    current_position = append_trade_log(
+        trade_log,
+        final_date,
+        final_time,
+        final_price,
+        current_position,
+        0,
+        TradeType.CLOSE_POSITION,
+    )
+    current_position = 0
 
     # Calculate final PnL
-    if not daily_data.empty:
-        final_price = daily_data.iloc[-1]["close"]
+    if not stock_data.empty:
+        final_price = stock_data.iloc[-1][stk_px_col]
 
-        # Mark-to-market the final position
-        final_position_value = current_position * final_price
+        # Calculate total cash flow from all trades
+        total_cash_flow = sum(trade["cash_flow"] for trade in trade_log)
+        
+        # Calculate total transaction costs
+        total_transaction_cost = sum(trade["transaction_cost"] for trade in trade_log)
 
-        # Total PnL = cash flow + final position value
-        # Since we started with PnL = 0, this represents the total P&L for the day
-        total_pnl = cash_flow + final_position_value
+        # Note on the sign: total_cash_flow is the raw pnl, while total_transaction_cost is a absolute value.
+        total_pnl = total_cash_flow - total_transaction_cost
 
         # Calculate some statistics
         total_trades = len(trade_log)
@@ -142,49 +176,37 @@ def calculate_daily_pnl(
 
     else:
         final_price = opening_price
-        final_position_value = total_pnl = 0
+        total_pnl = 0
         total_trades = rebalance_trades = total_volume = avg_trade_size = 0
         price_change = price_change_pct = 0
 
     # Return comprehensive results
     return {
-        "date": target_date,
         "opening_price": opening_price,
         "final_price": final_price,
         "price_change": price_change,
         "price_change_pct": price_change_pct,
-        "initial_position": initial_position,
-        "final_position": current_position,
-        "position_change": current_position - initial_position,
-        "final_position_value": final_position_value,
-        "cash_flow": cash_flow,
-        "total_pnl": total_pnl,
-        "total_transaction_cost": total_transaction_cost,
-        "net_pnl": total_pnl - total_transaction_cost,
         "total_trades": total_trades,
         "rebalance_trades": rebalance_trades,
         "total_volume": total_volume,
         "avg_trade_size": avg_trade_size,
         "trade_log": trade_log,
-        "pnl_breakdown": {
-            "cash_flow": cash_flow,
-            "position_value": final_position_value,
-            "total_pnl": total_pnl,
-            "transaction_costs": -total_transaction_cost,
-            "net_pnl": total_pnl - total_transaction_cost,
-        },
+        "total_cash_flow": total_cash_flow,
+        "total_transaction_cost": total_transaction_cost,
+        "total_pnl": total_pnl,
     }
 
 
-def analyze_multiple_days_pnl(
+def analyze_multiple_days_pnl_w_changing_stock_map(
     stock_data: pd.DataFrame,
-    hedge_maps: dict,
+    stock_share_maps: dict,
     start_date: str = None,
     end_date: str = None,
+    stk_px_col: str = 'close',
     transaction_cost_bps: float = 5.0,
 ) -> pd.DataFrame:
     """
-    Analyze PnL for multiple days.
+    Analyze PnL for multiple days, passing in a changing stock map for each day.
 
     Parameters:
     -----------
@@ -196,6 +218,8 @@ def analyze_multiple_days_pnl(
         Start date for analysis
     end_date : str, optional
         End date for analysis
+    stk_px_col : str
+        Column name for stock price (default: 'close')
     transaction_cost_bps : float
         Transaction cost in basis points
 
@@ -205,41 +229,37 @@ def analyze_multiple_days_pnl(
     """
 
     results = []
-    current_position = 0
 
     # Get date range
-    available_dates = sorted(hedge_maps.keys())
+    available_dates = sorted(stock_share_maps.keys())
     if start_date:
         available_dates = [d for d in available_dates if d >= start_date]
     if end_date:
         available_dates = [d for d in available_dates if d <= end_date]
 
     for date in tqdm(available_dates, desc="Calculating daily PnL"):
-        if date in hedge_maps:
-            sample_map = hedge_maps[date]
-
+        if date in stock_share_maps:
             # Calculate PnL for this day
-            daily_result = calculate_daily_pnl(
+            daily_result = calculate_pnl_w_static_stock_price_map(
                 stock_data=stock_data,
-                sample_map=sample_map,
-                target_date=date,
+                stock_price_map=stock_share_maps[date],
                 transaction_cost_bps=transaction_cost_bps,
+                stk_px_col=stk_px_col,
             )
 
             if "error" not in daily_result:
                 results.append(daily_result)
-                # Update position for next day
-                current_position = daily_result["final_position"]
 
     # Convert to DataFrame
     if results:
         df_results = pd.DataFrame(results)
 
         # Calculate cumulative metrics
-        df_results["cumulative_pnl"] = df_results["net_pnl"].cumsum()
+        df_results["cumulative_cash_flow"] = df_results["total_cash_flow"].cumsum()
         df_results["cumulative_transaction_cost"] = df_results[
             "total_transaction_cost"
         ].cumsum()
+        df_results["cumulative_pnl"] = df_results["cumulative_cash_flow"] - df_results["cumulative_transaction_cost"]
 
         return df_results
     else:
